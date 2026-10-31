@@ -60,18 +60,18 @@ Because a leg-mounted enclosure is oriented vertically or at an angle along the 
 
 $$\vec{g}_t = (1 - \alpha_g)\vec{g}_{t-1} + \alpha_g \vec{a}_t$$
 
-$$a_{\text{dyn}} = \sqrt{(a_x - g_x)^2 + (a_y - g_y)^2 + (a_z - g_z)^2}$$
+$$a_{\mathrm{dyn}} = \sqrt{(a_x - g_x)^2 + (a_y - g_y)^2 + (a_z - g_z)^2}$$
 
-- **360° Orientation-Free Step Detection**: Subtracting all 3 gravity components before computing the Euclidean magnitude makes $a_{\text{dyn}}$ invariant to whether the enclosure is mounted vertically, diagonally, or upside-down.
+- **360° Orientation-Free Step Detection**: Subtracting all 3 gravity components before computing the Euclidean magnitude makes $a_{\mathrm{dyn}}$ invariant to whether the enclosure is mounted vertically, diagonally, or upside-down.
 
 ### 2. 3D Dot-Product Leg Tilt & Asymmetric Transition Delays
-Instead of relying on a single axis (which suffers from gimbal lock when mounted vertically), the hind-leg tilt angle ($\theta_{\text{tilt}}$) is computed via the 3D dot product between the current gravity vector $\vec{g}$ and the calibrated standing reference vector $\vec{r} = (\text{REF\_GRAV\_X}, \text{REF\_GRAV\_Y}, \text{REF\_GRAV\_Z})$:
+Instead of relying on a single axis (which suffers from gimbal lock when mounted vertically), the hind-leg tilt angle ($\theta_{\mathrm{tilt}}$) is computed via the 3D dot product between the current gravity vector $\vec{g} = (g_x, g_y, g_z)$ and the calibrated standing reference vector $\vec{r} = (r_x, r_y, r_z)$ stored in `REF_GRAV_X`, `REF_GRAV_Y`, and `REF_GRAV_Z`:
 
-$$\theta_{\text{tilt}} = \arccos\left(\frac{\vec{g} \cdot \vec{r}}{\|\vec{g}\| \, \|\vec{r}\|}\right) \times \frac{180^\circ}{\pi}$$
+$$\theta_{\mathrm{tilt}} = \arccos\left(\frac{\vec{g} \cdot \vec{r}}{\lVert\vec{g}\rVert \lVert\vec{r}\rVert}\right) \times \frac{180^\circ}{\pi}$$
 
 - **Dual-Threshold Posture Hysteresis & Bout Filtering**:
-  - **Standing → Lying**: When $\theta_{\text{tilt}} \ge \text{LIE\_ANGLE\_DEG}$ (default `45°`) continuously for **`STAND_TO_LIE_DELAY_SEC`**, the state transitions to **Lying (`Sleep = 1, Stand = 0`)**.
-  - **Lying → Standing**: When $\theta_{\text{tilt}} \le \text{STAND\_ANGLE\_DEG}$ (default `30°`) continuously for **`LIE_TO_STAND_DELAY_SEC`**, the state transitions back to **Standing (`Stand = 1, Sleep = 0`)**.
+  - **Standing → Lying**: When $\theta_{\mathrm{tilt}} \ge \theta_{\mathrm{lie}}$ (`LIE_ANGLE_DEG`, default `45°`) continuously for **`STAND_TO_LIE_DELAY_SEC`**, the state transitions to **Lying (`Sleep = 1, Stand = 0`)**.
+  - **Lying → Standing**: When $\theta_{\mathrm{tilt}} \le \theta_{\mathrm{stand}}$ (`STAND_ANGLE_DEG`, default `30°`) continuously for **`LIE_TO_STAND_DELAY_SEC`**, the state transitions back to **Standing (`Stand = 1, Sleep = 0`)**.
   - *Scientific References*: Ledgerwood et al. (2010) and Ito et al. (2009), *Journal of Dairy Science*.
 
 ### 3. Posture-Gated Hysteresis Step Counting
@@ -85,7 +85,7 @@ $$\theta_{\text{tilt}} = \arccos\left(\frac{\vec{g} \cdot \vec{r}}{\|\vec{g}\| \
 ### 4. Polynomial Modulo-Prime OTP Authentication
 In [`OTP_Activity.h`](Cow-Stress-Tracker/OTP_Activity.h), each HTTPS request is authenticated using a time-based One-Time Password derived from the 10-digit NTP Unix timestamp and the device's secret parameters (`code1`, `code2`, `prime`) via Lagrange polynomial interpolation over $\mathbb{Z}_p$:
 
-$$\text{OTP} = \left( \sum_{i=1}^{4} y_i \cdot a_i \cdot b_i^{-1} \bmod p \right) \bmod p$$
+$$\mathrm{OTP} = \left( \sum_{i=1}^{4} y_i \cdot a_i \cdot b_i^{-1} \bmod p \right) \bmod p$$
 
 ---
 
@@ -122,7 +122,7 @@ To keep the secret `DEVICE_TABLE` (`code1`, `code2`, `prime` for Devices 1–20)
 
 ### 2. Estimated Runtime by Operating Scenario
 
-| Scenario | Operating Behavior & Duty Cycle | Average Current ($I_{\text{avg}}$) | Theoretical Full Capacity (600 mAh) | Practical Usable Capacity (520 mAh before 3.35V cutoff) |
+| Scenario | Operating Behavior & Duty Cycle | Average Current ($I_{\mathrm{avg}}$) | Theoretical Full Capacity (600 mAh) | Practical Usable Capacity (520 mAh before 3.35V cutoff) |
 | :--- | :--- | :---: | :---: | :---: |
 | **Best Case**<br>*(Maximum power saving)* | Cow resting/standing still continuously in `bigSleepMode` (10s sample → 5s fast Wi-Fi upload → 30s deep sleep) with strong Wi-Fi RSSI | **~20.0 mA** | **~30.0 Hours**<br>*(1 Day 6 Hrs)* | **~26.0 Hours**<br>*(1 Day 2 Hrs)* |
 | **Common Case**<br>*(Typical dairy farm day)* | 24h cow activity profile: 60% resting (`bigSleepMode` 30s sleep) + 25% intermittent movement (5s short sleep) + 15% continuous walking | **~30.2 mA** | **~19.9 Hours** | **~17.2 Hours** |
