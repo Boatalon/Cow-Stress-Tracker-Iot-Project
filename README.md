@@ -1,152 +1,148 @@
 # 🐄 Cow-Stress-Tracker & Cow-Stress-Calibrator
 
-ระบบตรวจวัดพฤติกรรมการก้าวเดิน (`ACT`) สถานะการยืน/การนอน (`Stand` / `Sleep`) มุมเอียงขา และอุณหภูมิร่างกายของโคนม ติดตั้งบริเวณ **ต้นขาหลัง 1 ข้าง** พัฒนาสำหรับบอร์ด **Seeed Studio XIAO ESP32-C3** พร้อมระบบจูนค่าเซ็นเซอร์แบบเรียลไทม์ผ่านหน้าเว็บไร้สาย (SoftAP) และการยืนยันตัวตนด้วยรหัส OTP ก่อนส่งข้อมูลขึ้นเซิร์ฟเวอร์
+An IoT dairy cattle locomotion (`ACT`), standing/lying posture (`Stand` / `Sleep`), leg tilt angle, and skin-surface temperature monitoring system mounted on a **single upper hind leg**. Built for the **Seeed Studio XIAO ESP32-C3**, featuring an offline real-time 50 Hz web calibration dashboard (SoftAP) and polynomial One-Time Password (OTP) authentication for secure telemetry uploads.
 
 ---
 
-## 📁 โครงสร้างโปรเจกต์ (Project Structure)
+## 📁 Project Structure
 
 ```text
-├── Cow-Stress-Calibrator/          # 1. เฟิร์มแวร์สำหรับหาค่าที่เหมาะสมและดูกราฟเซ็นเซอร์สด (Offline AP)
-│   ├── Cow-Stress-Calibrator.ino   # โค้ดหลักปล่อย WiFi "Cow-Calibrator" (http://192.168.4.1)
-│   ├── MotionTracker.h             # อัลกอริทึม 50Hz แยกแรงโน้มถ่วง นับก้าว และตรวจท่านอนพร้อมหน่วงเวลา
-│   └── WebDashboard.h              # หน้าเว็บ UI (PROGMEM) แสดงกราฟสด ปรับค่า และส่งออกโค้ด #define
+├── Cow-Stress-Calibrator/          # 1. Real-time 50 Hz sensor waveform & parameter tuning firmware (Offline SoftAP)
+│   ├── Cow-Stress-Calibrator.ino   # Broadcasts Wi-Fi AP "Cow-Calibrator" (http://192.168.4.1)
+│   ├── MotionTracker.h             # 50 Hz 3D gravity separation, hysteresis step counter & posture bout filter
+│   └── WebDashboard.h              # Embedded Web UI (PROGMEM) with live dual-canvas charts & #define exporter
 │
-├── Cow-Stress-Tracker/             # 2. เฟิร์มแวร์ใช้งานจริงสำหรับติดขาโคและส่งข้อมูลขึ้นเซิร์ฟเวอร์
-│   ├── Cow-Stress-Tracker.ino      # โค้ดหลักรองรับ WiFiManager + Deep Sleep + นับก้าว/ท่านอน + ส่ง API
-│   ├── OTP_Activity.h              # อัลกอริทึมคำนวณรหัส OTP แบบ Polynomial Modulo Prime
-│   ├── OTP_Secrets.example.h       # ไฟล์ตัวอย่างโครงสร้างตาราง API Key (Device 1-20)
-│   └── OTP_Secrets.h               # ไฟล์เก็บ API Key จริง (ถูกซ่อนด้วย .gitignore ไม่ขึ้น Git)
+├── Cow-Stress-Tracker/             # 2. Production field tracker firmware with Deep Sleep & HTTPS OTP telemetry
+│   ├── Cow-Stress-Tracker.ino      # Main firmware: WiFiManager + RTC Deep Sleep + Step/Posture tracker + API client
+│   ├── OTP_Activity.h              # Polynomial modulo-prime One-Time Password (OTP) generator
+│   ├── OTP_Secrets.example.h       # Template for per-device secret keys (Device IDs 1–20)
+│   └── OTP_Secrets.h               # Local secret key table (excluded from Git via .gitignore)
 │
-├── .gitignore                      # ป้องกันไฟล์รหัสลับ OTP_Secrets.h หลุดขึ้น Git
-└── README.md                       # เอกสารคู่มือโปรเจกต์
+├── .gitignore                      # Prevents OTP_Secrets.h and build artifacts from being committed
+└── README.md                       # Project documentation
 ```
 
 ---
 
-## 🛠️ รายการอุปกรณ์ (Bill of Materials)
+## 🛠️ Bill of Materials (Hardware List)
 
-| ลำดับ | อุปกรณ์ | รุ่น / สเปก | จำนวน | หน้าที่ในระบบ |
-| :---: | :--- | :--- | :---: | :--- |
-| 1 | ไมโครคอนโทรลเลอร์ | **Seeed Studio XIAO ESP32-C3** (RISC-V 160 MHz, Wi-Fi 2.4 GHz) | 1 บอร์ด | ประมวลผลสัญญาณ 50 Hz, ปล่อยหน้าเว็บตั้งค่า, ส่งข้อมูล HTTPS และจัดการ Deep Sleep |
-| 2 | เซ็นเซอร์ความเร่งและวัดมุม | **MPU6050 (GY-521)** 3-Axis Accelerometer + 3-Axis Gyroscope (I2C) | 1 โมดูล | วัดแรงกระแทกการก้าวขา ($g$) และวัดเวกเตอร์แรงโน้มถ่วงเพื่อคำนวณมุมเอียงต้นขาหลัง |
-| 3 | เซ็นเซอร์วัดอุณหภูมิ | **DS18B20** (Waterproof Probe หรือ TO-92) (1-Wire) | 1 ตัว | วัดอุณหภูมิผิวสัมผัสบริเวณขาหลังโค |
-| 4 | ตัวต้านทาน Pull-up | **4.7 kΩ** (1/4W) | 1 ตัว | ต่อคร่อมระหว่างขา `DATA (D3)` กับ `3V3` ของเซ็นเซอร์ DS18B20 |
-| 5 | แบตเตอรี่ | **LiPo 1S 3.7V 600 mAh** (2.22 Wh) | 1 ก้อน | แหล่งจ่ายไฟพกพา ต่อเข้าจุดบัดกรี `BAT+` / `BAT-` ด้านใต้บอร์ด XIAO ESP32-C3 |
-| 6 | เสาอากาศ | **2.4 GHz IPEX / U.FL Antenna** (ที่มาพร้อม XIAO ESP32-C3) | 1 เส้น | รับ-ส่งสัญญาณ Wi-Fi (ควรหันด้านเสาอากาศออกด้านนอกลำตัวโค) |
-| 7 | กล่องกันน้ำและสายรัด | กล่องพลาสติกขนาดเล็ก + สายรัดตีนตุ๊กแก (Velcro Strap) | 1 ชุด | ยึดกระชับบริเวณต้นขาหลัง 1 ข้าง |
+| # | Component | Model / Specification | Qty | Purpose |
+| :-: | :--- | :--- | :-: | :--- |
+| 1 | Microcontroller | **Seeed Studio XIAO ESP32-C3** (RISC-V 160 MHz, Wi-Fi 2.4 GHz) | 1 | 50 Hz sensor processing, SoftAP calibration portal, HTTPS client, and Deep Sleep management |
+| 2 | IMU Sensor | **MPU6050 (GY-521)** 3-Axis Accelerometer + 3-Axis Gyroscope (I2C) | 1 | Measures leg step impact acceleration ($g$) and 3D gravitational tilt angle |
+| 3 | Temperature Sensor | **DS18B20** Waterproof Probe / TO-92 (1-Wire) | 1 | Measures hind-leg skin surface temperature |
+| 4 | Pull-up Resistor | **4.7 kΩ** (1/4W) | 1 | Pull-up resistor between DS18B20 `DATA (D3)` and `3V3` |
+| 5 | Battery | **LiPo 1S 3.7V 600 mAh** (2.22 Wh) | 1 | Portable power supply connected to the `BAT+` / `BAT-` pads on the XIAO ESP32-C3 |
+| 6 | Antenna | **2.4 GHz IPEX / U.FL Antenna** (included with XIAO ESP32-C3) | 1 | Wireless transmission (orient outward away from the cow's body) |
+| 7 | Enclosure & Strap | Weatherproof compact enclosure + Velcro leg strap | 1 | Secures the sensor module to the upper hind leg |
 
-### 📌 การต่อสายวงจร (Pinout Mapping)
+### 📌 Pinout Mapping (Seeed Studio XIAO ESP32-C3)
 
-| อุปกรณ์ | ขาสัญญาณอุปกรณ์ | ขาบนบอร์ด XIAO ESP32-C3 | หมายเหตุ |
+| Peripheral | Peripheral Pin | XIAO ESP32-C3 Pin | Notes |
 | :--- | :---: | :---: | :--- |
-| **MPU6050** | `VCC` | `3V3` | ใช้แรงดัน 3.3V |
-| **MPU6050** | `GND` | `GND` | กราวด์ร่วม |
+| **MPU6050** | `VCC` | `3V3` | 3.3V power supply |
+| **MPU6050** | `GND` | `GND` | Common ground |
 | **MPU6050** | `SDA` | **`D5`** (`GPIO7`) | I2C Data |
 | **MPU6050** | `SCL` | **`D4`** (`GPIO6`) | I2C Clock |
-| **DS18B20** | `VCC` (แดง) | `3V3` | ใช้แรงดัน 3.3V |
-| **DS18B20** | `GND` (ดำ) | `GND` | กราวด์ร่วม |
-| **DS18B20** | `DQ / DATA` (เหลือง) | **`D3`** (`GPIO5`) | ต่อตัวต้านทาน 4.7 kΩ Pull-up ไปยัง `3V3` |
-| **ปุ่มตั้งค่า WiFi** | ปุ่ม `BOOT` บนบอร์ด | **`GPIO9`** | กดภายใน 3 วินาทีหลังเปิดเครื่องเพื่อเข้าหน้าตั้งค่า WiFi/Device ID |
+| **DS18B20** | `VCC` (Red) | `3V3` | 3.3V power supply |
+| **DS18B20** | `GND` (Black) | `GND` | Common ground |
+| **DS18B20** | `DQ / DATA` (Yellow) | **`D3`** (`GPIO5`) | Requires a 4.7 kΩ pull-up resistor to `3V3` |
+| **Config Button** | Onboard `BOOT` Button | **`GPIO9`** | Press within 3 seconds of boot/reset to open the WiFiManager portal |
 
 ---
 
-## 🧠 หลักการทำงานและอัลกอริทึม (Core Principles & Scientific Basis)
+## 🧠 Core Algorithms & Scientific Principles
 
-ระบบอ่านค่าความเร่ง 3 แกน $(a_x, a_y, a_z)$ ที่ความถี่คงที่ **50 Hz (ทุก 20 ms)** และประมวลผลตามหลักสรีรวิทยาและการเคลื่อนที่ของโคนม:
+The system samples 3-axis acceleration $(a_x, a_y, a_z)$ at a constant **50 Hz (every 20 ms)** using non-blocking temperature conversion (`setWaitForConversion(false)`) so no locomotion impulses are missed.
 
-### 1. การแยกแรงโน้มถ่วงโลกและรองรับการติดตั้งทุกองศา (3D Gravity Separation & Orientation Independence)
-เนื่องจากเมื่อรัดกล่องเซ็นเซอร์เข้ากับต้นขาหลังโค ตัวบอร์ดจะไม่ได้วางอยู่ในแนวราบ ระบบจึงใช้ตัวกรองความถี่ต่ำ (Exponential Moving Average Low-Pass Filter, $\alpha_g = 0.04$) แยกเวกเตอร์แรงโน้มถ่วงโลก $\vec{g} = (g_x, g_y, g_z)$ ออกจากความเร่งที่เกิดจากการขยับขา:
+### 1. 3D Gravity Separation & Orientation Independence
+Because a leg-mounted enclosure is oriented vertically or at an angle along the hind-leg muscle rather than lying flat horizontally, an Exponential Moving Average (EMA) low-pass filter ($\alpha_g = 0.04$) continuously isolates the 3D gravity vector $\vec{g} = (g_x, g_y, g_z)$ from dynamic movement acceleration:
 
 $$\vec{g}_t = (1 - \alpha_g)\vec{g}_{t-1} + \alpha_g \vec{a}_t$$
 
 $$a_{\text{dyn}} = \sqrt{(a_x - g_x)^2 + (a_y - g_y)^2 + (a_z - g_z)^2}$$
 
-- **ผลการนับก้าวไม่ขึ้นกับทิศทางการติดตั้ง (360° Orientation-Free)**: ไม่ว่าจะติดแนวตั้ง แนวเฉียง หรือกลับหัว ขนาดเวกเตอร์ความเร่งของการขยับขา $a_{\text{dyn}}$ จะให้ค่าเท่าเดิมเสมอ
+- **360° Orientation-Free Step Detection**: Subtracting all 3 gravity components before computing the Euclidean magnitude makes $a_{\text{dyn}}$ invariant to whether the enclosure is mounted vertically, diagonally, or upside-down.
 
-### 2. การตรวจจับท่ายืน/ท่านอนด้วย 3D Dot-Product และเวลาหน่วงสองทิศทาง (Posture & Bout Filter)
-แทนที่จะดูมุมแกนเดียว ระบบคำนวณมุมเอียงของต้นขาหลัง ($\theta_{\text{tilt}}$) โดยเทียบมุม 3 มิติระหว่างเวกเตอร์แรงโน้มถ่วงปัจจุบัน $\vec{g}$ กับเวกเตอร์ท่ายืนอ้างอิง $\vec{r} = (\text{REF\_GRAV\_X}, \text{REF\_GRAV\_Y}, \text{REF\_GRAV\_Z})$:
+### 2. 3D Dot-Product Leg Tilt & Asymmetric Transition Delays
+Instead of relying on a single axis (which suffers from gimbal lock when mounted vertically), the hind-leg tilt angle ($\theta_{\text{tilt}}$) is computed via the 3D dot product between the current gravity vector $\vec{g}$ and the calibrated standing reference vector $\vec{r} = (\text{REF\_GRAV\_X}, \text{REF\_GRAV\_Y}, \text{REF\_GRAV\_Z})$:
 
 $$\theta_{\text{tilt}} = \arccos\left(\frac{\vec{g} \cdot \vec{r}}{\|\vec{g}\| \, \|\vec{r}\|}\right) \times \frac{180^\circ}{\pi}$$
 
-- **เกณฑ์มุมสองระดับ (Hysteresis Angle)**:
-  - เมื่อขาพับเอียงทำมุม $\theta_{\text{tilt}} \ge \text{LIE\_ANGLE\_DEG}$ (ค่าเริ่มต้น `45°`) ต่อเนื่องครบเวลา **`STAND_TO_LIE_DELAY_SEC`** ระบบจะเปลี่ยนสถานะเป็น **นอน (`Sleep = 1, Stand = 0`)**
-  - เมื่อวัวลุกขึ้นยืนจนมุมขากลับมา $\theta_{\text{tilt}} \le \text{STAND\_ANGLE\_DEG}$ (ค่าเริ่มต้น `30°`) ต่อเนื่องครบเวลา **`LIE_TO_STAND_DELAY_SEC`** ระบบจะเปลี่ยนสถานะกลับเป็น **ยืน (`Stand = 1, Sleep = 0`)**
-  - *อ้างอิงงานวิจัย*: Ledgerwood et al. (2010) และ Ito et al. (2009) (*Journal of Dairy Science*)
+- **Dual-Threshold Posture Hysteresis & Bout Filtering**:
+  - **Standing → Lying**: When $\theta_{\text{tilt}} \ge \text{LIE\_ANGLE\_DEG}$ (default `45°`) continuously for **`STAND_TO_LIE_DELAY_SEC`**, the state transitions to **Lying (`Sleep = 1, Stand = 0`)**.
+  - **Lying → Standing**: When $\theta_{\text{tilt}} \le \text{STAND\_ANGLE\_DEG}$ (default `30°`) continuously for **`LIE_TO_STAND_DELAY_SEC`**, the state transitions back to **Standing (`Stand = 1, Sleep = 0`)**.
+  - *Scientific References*: Ledgerwood et al. (2010) and Ito et al. (2009), *Journal of Dairy Science*.
 
-### 3. การนับก้าวแบบ Hysteresis และล็อกการนับก้าวขณะนอน (Posture-Gated Step Counting)
-- **ล็อกการนับก้าวเมื่ออยู่ในท่านอน**: หากสถานะปัจจุบันเป็นท่านอน (`last_stand == 0`) ระบบจะ **บล็อกการนับก้าว 100%** เพื่อป้องกันการนับหลอกเวลาวัวนอนขยับขาหรือสะบัดแมลง
-- **Hysteresis Peak Detector**:
-  1. เริ่มนับ 1 ก้าวเมื่อวัวยืนอยู่ และคลื่นความเร่งพุ่งข้ามเกณฑ์ **`STEP_TRIGGER_G`** (ค่าเริ่มต้น `0.35 g`)
-  2. ล็อกไม่ให้นับซ้ำภายในระยะเวลา **`STEP_DELAY_MS`** (ค่าเริ่มต้น `500 ms`) เพื่อป้องกันการนับเบิ้ลจากจังหวะยกขาและวางกีบในก้าวเดียวกัน
-  3. คลื่นความเร่งต้องลดลงต่ำกว่า **`STEP_RESET_G`** (ค่าเริ่มต้น `0.15 g`) ก่อน จึงจะปลดล็อกพร้อมนับก้าวถัดไป
-  - *อ้างอิงงานวิจัย*: Alsaaod et al. (2015), Chapinal et al. (2011) และ Flower et al. (2005)
+### 3. Posture-Gated Hysteresis Step Counting
+- **Lying Lockout**: Whenever the cow is in the lying state (`last_stand == 0`), step counting is **100% locked out**, preventing false step counts from leg twitches or fly-swatting kicks while resting.
+- **Two-Level Hysteresis Peak Detector**:
+  1. A step is triggered when standing and smoothed dynamic acceleration crosses **`STEP_TRIGGER_G`** (default `0.35 g`).
+  2. Subsequent peaks within **`STEP_DELAY_MS`** (default `500 ms`) are ignored to avoid double-counting the lift and hoof-strike phases of a single stride.
+  3. The signal must drop below **`STEP_RESET_G`** (default `0.15 g`) to re-arm the detector for the next step.
+  - *Scientific References*: Alsaaod et al. (2015), Chapinal et al. (2011), and Flower et al. (2005).
 
-### 4. การเข้ารหัสรักษาความปลอดภัยด้วยรหัสผ่านใช้ครั้งเดียว (OTP Authentication)
-ในไฟล์ [`OTP_Activity.h`](Cow-Stress-Tracker/OTP_Activity.h) ก่อนส่งข้อมูลผ่าน HTTPS ทุกครั้ง บอร์ดจะดึงเวลา Unix Timestamp (10 หลัก) จากเซิร์ฟเวอร์ NTP แล้วนำมาคำนวณร่วมกับรหัสลับเฉพาะตัวของอุปกรณ์ (`code1`, `code2`, และจำนวนเฉพาะ `prime`) ด้วยสมการพหุนาม Lagrange Interpolation ภายใต้เลขคณิตมอดูโลจำนวนเฉพาะ $\pmod p$:
+### 4. Polynomial Modulo-Prime OTP Authentication
+In [`OTP_Activity.h`](Cow-Stress-Tracker/OTP_Activity.h), each HTTPS request is authenticated using a time-based One-Time Password derived from the 10-digit NTP Unix timestamp and the device's secret parameters (`code1`, `code2`, `prime`) via Lagrange polynomial interpolation over $\mathbb{Z}_p$:
 
 $$\text{OTP} = \left( \sum_{i=1}^{4} y_i \cdot a_i \cdot b_i^{-1} \bmod p \right) \bmod p$$
 
-ทำให้รหัส `Code` เปลี่ยนไปทุกวินาทีตามเวลาจริง ป้องกันการปลอมแปลงข้อมูลส่งเข้าเซิร์ฟเวอร์
-
 ---
 
-## 🔐 วิธีซ่อนและจัดการ API Key (`OTP_Secrets.h`)
+## 🔐 Protecting Device API Keys (`OTP_Secrets.h`)
 
-เพื่อไม่ให้ตารางรหัสลับ (`code1`, `code2`, `prime`) ของอุปกรณ์ทั้ง 20 ตัวถูกเปิดเผยบน GitHub โปรเจกต์นี้ใช้วิธี **แยกไฟล์รหัสลับร่วมกับ `#if __has_include` และ `.gitignore`**:
+To keep the secret `DEVICE_TABLE` (`code1`, `code2`, `prime` for Devices 1–20) out of public Git history while allowing the repository to compile out of the box:
 
-1. **ไฟล์ [`OTP_Activity.h`](Cow-Stress-Tracker/OTP_Activity.h)** (อยู่บน Git): เก็บเฉพาะฟังก์ชันคำนวณ `calCode()` และ `genCode()` โดยใช้คำสั่งตรวจสอบไฟล์อัตโนมัติ:
+1. **[`OTP_Activity.h`](Cow-Stress-Tracker/OTP_Activity.h)** (tracked in Git) contains only the OTP math functions and conditionally includes `OTP_Secrets.h`:
    ```cpp
    #if __has_include("OTP_Secrets.h")
      #include "OTP_Secrets.h"
    #else
-     // ใช้ Dummy Keys อัตโนมัติเพื่อให้โค้ดคอมไพล์ผ่านได้เมื่อเพิ่งโคลนโปรเจกต์
+     // Falls back to dummy keys so fresh clones compile cleanly
    #endif
    ```
-2. **ไฟล์ [`OTP_Secrets.h`](Cow-Stress-Tracker/OTP_Secrets.h)** (อยู่ในเครื่องของคุณและถูกซ่อนด้วย [`.gitignore`](.gitignore)): เก็บตาราง `DEVICE_TABLE` ของจริงไว้ ทำให้ไม่ถูกอัปโหลดขึ้น Git
-3. **เมื่อโคลนโปรเจกต์ไปที่เครื่องใหม่**: ให้คัดลอกไฟล์ [`OTP_Secrets.example.h`](Cow-Stress-Tracker/OTP_Secrets.example.h) แล้วเปลี่ยนชื่อเป็น `OTP_Secrets.h` จากนั้นกรอกค่าจริงลงไป:
+2. **[`OTP_Secrets.h`](Cow-Stress-Tracker/OTP_Secrets.h)** (ignored by [`.gitignore`](.gitignore)) stores the real production keys locally on your machine.
+3. **Setting up on a new machine**:
    ```bash
    cp Cow-Stress-Tracker/OTP_Secrets.example.h Cow-Stress-Tracker/OTP_Secrets.h
    ```
-
-> **ทางเลือกเพิ่มเติมในการซ่อน Key (กรณีไม่ต้องการให้มี Key อยู่ในไฟล์โค้ดเลย)**:
-> สามารถเพิ่มช่องกรอก `code1`, `code2`, `prime` ในหน้าเว็บ Captive Portal ของ `WiFiManager` แล้วบันทึกลงหน่วยความจำ **NVS Flash (`Preferences`)** ของชิป ESP32-C3 ตอนตั้งค่าครั้งแรกได้เช่นกัน
+   Then populate `Cow-Stress-Tracker/OTP_Secrets.h` with your real device keys.
 
 ---
 
-## 🔋 การคำนวณอายุการใช้งานแบตเตอรี่ (600 mAh 1S 3.7V / 2.2 Wh)
+## 🔋 Battery Life Analysis (600 mAh 1S 3.7V / 2.2 Wh LiPo)
 
-### 1. อัตราการกินไฟของแต่ละส่วนประกอบ
-- **โมดูล MPU6050 (GY-521)**: ชิปเปิด Accel+Gyro (~3.6 mA) + ไฟ LED และ LDO บนบอร์ด (~1.9 mA) = **~5.5 mA ตลอดเวลา**
-- **เซ็นเซอร์ DS18B20**: เฉลี่ย **~0.2 mA**
-- **บอร์ด Seeed XIAO ESP32-C3**:
-  - **ขณะอยู่ในโหมด Deep Sleep**: ตัวชิป ESP32-C3 กิน 0.044 mA + เซ็นเซอร์ = **รวม ~5.6 mA**
-  - **ขณะตื่นอ่านค่าเซ็นเซอร์ 50 Hz (ปิด WiFi)**: ตัวชิปกิน ~24 mA + เซ็นเซอร์ = **รวม ~30.0 mA**
-  - **ขณะเชื่อมต่อ WiFi + ซิงค์ NTP + ส่งข้อมูล HTTPS (`WIFI_POWER_8_5dBm`)**: เฉลี่ย **รวม ~90 – 105 mA**
+### 1. Component Current Consumption Breakdown
+- **MPU6050 Module (GY-521)**: Continuous draw of **~5.5 mA** (~3.6 mA sensor core + ~1.9 mA onboard LED & LDO).
+- **DS18B20 Temperature Sensor**: **~0.2 mA** average (non-blocking conversion).
+- **Seeed Studio XIAO ESP32-C3**:
+  - **Deep Sleep Mode**: 0.044 mA MCU + peripherals = **~5.6 mA total**
+  - **Active 50 Hz Sampling (Wi-Fi Off)**: ~24 mA MCU + peripherals = **~30.0 mA total**
+  - **Wi-Fi Connect + NTP Sync + HTTPS GET (`WIFI_POWER_8_5dBm`)**: **~90 – 105 mA total**
 
-### 2. ตารางเปรียบเทียบอายุการใช้งานแบตเตอรี่ (Best / Common / Worst Case)
+### 2. Estimated Runtime by Operating Scenario
 
-| กรณีการใช้งาน (Scenario) | พฤติกรรมการทำงานของโค้ดและโค | กระแสเฉลี่ยรวม ($I_{\text{avg}}$) | คิดจากความจุเต็ม 600 mAh (ทฤษฎี 100%) | คิดจากความจุใช้งานจริง 520 mAh (ก่อนไฟตก 3.35V) |
+| Scenario | Operating Behavior & Duty Cycle | Average Current ($I_{\text{avg}}$) | Theoretical Full Capacity (600 mAh) | Practical Usable Capacity (520 mAh before 3.35V cutoff) |
 | :--- | :--- | :---: | :---: | :---: |
-| **Best Case**<br>*(ประหยัดไฟที่สุด)* | โคนอนพัก/ยืนนิ่งต่อเนื่อง เข้าโหมด `bigSleepMode` (ตื่นเช็ก 10s → ส่ง WiFi เร็ว 5s → หลับยาว 30s) สัญญาณ WiFi แรง | **~20.0 mA** | **~30.0 ชั่วโมง**<br>*(1 วัน 6 ชม.)* | **~26.0 ชั่วโมง**<br>*(1 วัน 2 ชม.)* |
-| **Common Case**<br>*(ใช้งานจริงในฟาร์ม)* | พฤติกรรมโคใน 24 ชม.: นอนพักนิ่ง 60% (หลับยาว 30s) + ยืนขยับสลับหยุด 25% (หลับสั้น 5s) + เดินต่อเนื่อง 15% | **~30.2 mA** | **~19.9 ชั่วโมง** | **~17.2 ชั่วโมง** |
-| **Worst Case (Tracker)**<br>*(กินไฟสูงสุดตอนใช้งานจริง)* | โคขยับสลับหยุดบ่อย (หลับสั้น 5s) **และ** อยู่ไกล Router จนต่อ WiFi ช้า/ติด Timeout 15 วินาทีทุกครั้งก่อนหลับ | **~63.4 mA** | **~9.5 ชั่วโมง** | **~8.2 ชั่วโมง** |
-| **Worst Case (Calibrator)**<br>*(โหมดจูนค่าผ่านหน้าเว็บ)* | รันโค้ด `Cow-Stress-Calibrator` ปล่อย WiFi AP + ส่งกราฟสด 50 Hz ตลอดเวลาโดยไม่เข้า Deep Sleep | **~110.0 mA** | **~5.5 ชั่วโมง** | **~4.7 ชั่วโมง** |
+| **Best Case**<br>*(Maximum power saving)* | Cow resting/standing still continuously in `bigSleepMode` (10s sample → 5s fast Wi-Fi upload → 30s deep sleep) with strong Wi-Fi RSSI | **~20.0 mA** | **~30.0 Hours**<br>*(1 Day 6 Hrs)* | **~26.0 Hours**<br>*(1 Day 2 Hrs)* |
+| **Common Case**<br>*(Typical dairy farm day)* | 24h cow activity profile: 60% resting (`bigSleepMode` 30s sleep) + 25% intermittent movement (5s short sleep) + 15% continuous walking | **~30.2 mA** | **~19.9 Hours** | **~17.2 Hours** |
+| **Worst Case (Tracker)**<br>*(Weak Wi-Fi + frequent stops)* | Frequent start/stop movement (5s sleep cycles) **and** weak Wi-Fi signal causing 15s connection timeouts before sleep | **~63.4 mA** | **~9.5 Hours** | **~8.2 Hours** |
+| **Worst Case (Calibrator)**<br>*(Continuous SoftAP streaming)* | Running `Cow-Stress-Calibrator` with continuous Wi-Fi SoftAP + 50 Hz live web dashboard (no Deep Sleep) | **~110.0 mA** | **~5.5 Hours** | **~4.7 Hours** |
 
 ---
 
-## 🚀 ขั้นตอนการใช้งาน (Quick Start)
+## 🚀 Quick Start Guide
 
-### ขั้นตอนที่ 1: จูนค่าด้วย `Cow-Stress-Calibrator`
-1. อัปโหลดโค้ดในโฟลเดอร์ [`Cow-Stress-Calibrator/Cow-Stress-Calibrator.ino`](Cow-Stress-Calibrator/Cow-Stress-Calibrator.ino) ลงบอร์ด XIAO ESP32-C3
-2. นำอุปกรณ์ไปรัดที่ **ต้นขาหลังของโค**
-3. ใช้โทรศัพท์มือถือหรือโน้ตบุ๊กเชื่อมต่อ WiFi ชื่อ **`Cow-Calibrator`** (รหัสผ่าน: **`12345678`**) แล้วเปิดเบราว์เซอร์ไปที่ **`http://192.168.4.1`**
-4. ขณะที่โคยืนนิ่งตามธรรมชาติ กดปุ่ม **`ตั้งท่ายืนปัจจุบันเป็น 0° (Calibrate)`** เพื่อให้ระบบจำมุมติดตั้งจริงเป็นท่ายืนอ้างอิง
-5. ปรับค่าแถบเลื่อน (หรือคลิกที่ตัวเลขเพื่อพิมพ์ค่า) จนการนับก้าวและการเปลี่ยนท่ายืน/นอนแม่นยำ แล้วกดปุ่ม **`คัดลอกโค้ด #define`** ด้านล่างสุดของหน้าเว็บ
+### Step 1: Field Tuning with `Cow-Stress-Calibrator`
+1. Flash [`Cow-Stress-Calibrator/Cow-Stress-Calibrator.ino`](Cow-Stress-Calibrator/Cow-Stress-Calibrator.ino) to the XIAO ESP32-C3.
+2. Strap the enclosure onto the cow's **upper hind leg**.
+3. Connect your phone or laptop to the Wi-Fi network **`Cow-Calibrator`** (Password: **`12345678`**) and open **`http://192.168.4.1`**.
+4. While the cow is standing naturally, tap **`ตั้งท่ายืนปัจจุบันเป็น 0° (Calibrate)`** to record the 3D standing reference gravity vector (`REF_GRAV_X/Y/Z`).
+5. Adjust the sliders (or click any numeric value to type directly) while observing the live waveforms, then copy the generated `#define` block at the bottom of the page.
 
-### ขั้นตอนที่ 2: อัปโหลดโค้ดใช้งานจริง `Cow-Stress-Tracker`
-1. เปิดไฟล์ [`Cow-Stress-Tracker/Cow-Stress-Tracker.ino`](Cow-Stress-Tracker/Cow-Stress-Tracker.ino) แล้ววางโค้ด `#define` ที่คัดลอกมาทับส่วนตั้งค่าด้านบนสุดของไฟล์ (บรรทัดที่ 16–27)
-2. ตรวจสอบว่ามีไฟล์ `OTP_Secrets.h` ที่ใส่รหัส API Key จริงอยู่ในโฟลเดอร์ `Cow-Stress-Tracker/` แล้วอัปโหลดลงบอร์ด
-3. **การตั้งค่า WiFi และ Device ID (1–20)**:
-   - ค่าเริ่มต้นจะเชื่อมต่อ WiFi `TP-Link_0A08` (รหัส `84940339`) และใช้ `Device ID = 1`
-   - หากต้องการเปลี่ยน WiFi หรือเปลี่ยนหมายเลข `Device ID`: ให้กดปุ่ม `RESET` แล้วกดปุ่ม **`BOOT`** ค้างไว้ภายใน 3 วินาที บอร์ดจะปล่อย WiFi ชื่อ **`Cow-Stress-Tracker-Config`** ให้เข้าไปตั้งค่าที่ `http://192.168.4.1` และจำค่าลง Flash ถาวร
+### Step 2: Deploying `Cow-Stress-Tracker`
+1. Paste the calibrated `#define` constants at the top of [`Cow-Stress-Tracker/Cow-Stress-Tracker.ino`](Cow-Stress-Tracker/Cow-Stress-Tracker.ino) (lines 16–27).
+2. Ensure `Cow-Stress-Tracker/OTP_Secrets.h` is present with your device keys, then upload the sketch.
+3. **Configuring Wi-Fi & Device ID (1–20)**:
+   - By default, the tracker connects to `TP-Link_0A08` (`84940339`) using `Device ID = 1`.
+   - To change Wi-Fi credentials or the `Device ID` in the field: press `RESET` and hold the onboard **`BOOT`** button within 3 seconds. Connect to the **`Cow-Stress-Tracker-Config`** AP and configure at `http://192.168.4.1`.
