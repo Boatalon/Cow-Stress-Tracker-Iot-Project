@@ -1,0 +1,14 @@
+{
+  "regions": ["sin1"],
+  "rewrites": [
+    {
+      "source": "/Dairy-cattle-system-test/IoTDevice/Activity/input.php",
+      "destination": "/api/iot/input"
+    },
+    {
+      "source": "/input.php",
+      "destination": "/api/iot/input"
+    }
+  ]
+}
+

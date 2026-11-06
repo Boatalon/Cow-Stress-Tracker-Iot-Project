@@ -2,6 +2,9 @@
 # ซ่อนไฟล์รหัสลับ OTP / API Keys ไม่ให้ถูกอัปโหลดขึ้น Git Repository
 # ============================================================================
 **/OTP_Secrets.h
+**/.env
+**/.env.local
+**/.env.*.local
 
 # ไฟล์ระบบและไฟล์ Build ของ Arduino / macOS
 .DS_Store
@@ -12,3 +15,8 @@
 build/
 .vscode/
 
+# Next.js Web Dashboard
+**/node_modules/
+**/.next/
+**/out/
+**/.vercel/
